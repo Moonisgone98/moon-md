@@ -1,17 +1,33 @@
 <script setup>
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, onUnmounted } from 'vue'
 
 const props = defineProps({
   content: { type: String, required: true },
 })
-const emit = defineEmits(['update:content'])
+const emit = defineEmits(['update:content', 'scroll'])
 
 const textarea = ref(null)
-const dragging = ref(false)
 
 function onInput(e) {
   emit('update:content', e.target.value)
 }
+
+// 滚动同步：编辑区滚动时，按比例计算并发送滚动位置给预览区
+let scrollRaf = null
+function onScroll() {
+  if (scrollRaf) return
+  scrollRaf = requestAnimationFrame(() => {
+    scrollRaf = null
+    const el = textarea.value
+    if (!el) return
+    const max = el.scrollHeight - el.clientHeight
+    emit('scroll', max > 0 ? el.scrollTop / max : 0)
+  })
+}
+
+onUnmounted(() => {
+  if (scrollRaf) cancelAnimationFrame(scrollRaf)
+})
 
 function wrapSelection(before, after = before, placeholder = '') {
   const el = textarea.value
@@ -41,6 +57,7 @@ defineExpose({
   ol: () => insertLinePrefix('1. '),
   link: () => wrapSelection('[', '](https://)', '链接文字'),
   codeblock: () => wrapSelection('\n```js\n', '\n```\n', '// 代码'),
+  focus: () => textarea.value?.focus(),
 })
 
 function insertLinePrefix(prefix) {
@@ -56,36 +73,10 @@ function insertLinePrefix(prefix) {
     el.selectionStart = el.selectionEnd = start + prefix.length
   })
 }
-
-function onDrop(e) {
-  if (!e.dataTransfer?.files?.length) return
-  const file = e.dataTransfer.files[0]
-  if (!file.type.startsWith('image/')) return
-  e.preventDefault()
-  const reader = new FileReader()
-  reader.onload = () => {
-    const mark = `\n![${file.name}](${reader.result})\n`
-    const el = textarea.value
-    const pos = el ? el.selectionStart : props.content.length
-    const next = props.content.slice(0, pos) + mark + props.content.slice(pos)
-    emit('update:content', next)
-  }
-  reader.readAsDataURL(file)
-}
-
-function onDragOver(e) {
-  if (e.dataTransfer?.types?.includes('Files')) {
-    e.preventDefault()
-    dragging.value = true
-  }
-}
-function onDragLeave() {
-  dragging.value = false
-}
 </script>
 
 <template>
-  <section class="editor" :class="{ dragging }" @drop="onDrop" @dragover="onDragOver" @dragleave="onDragLeave">
+  <section class="editor">
     <div class="editor__hint">
       <span class="dot"></span>
       编辑区
@@ -97,10 +88,8 @@ function onDragLeave() {
       spellcheck="false"
       placeholder="在这里写下点什么…"
       @input="onInput"
+      @scroll.passive="onScroll"
     ></textarea>
-    <transition name="drop-flag">
-      <div v-if="dragging" class="editor__drop">释放以插入图片</div>
-    </transition>
   </section>
 </template>
 
@@ -108,6 +97,8 @@ function onDragLeave() {
 .editor {
   position: relative;
   height: 100%;
+  flex: 1 1 0%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   background: var(--surface-soft);
@@ -153,31 +144,6 @@ function onDragLeave() {
 .editor__textarea::placeholder {
   color: var(--ink-faint);
   font-style: italic;
-}
-.editor.dragging {
-  background: var(--sage-soft);
-}
-.editor__drop {
-  position: absolute;
-  inset: 12px;
-  border: 2px dashed var(--sage);
-  border-radius: var(--r-md);
-  display: grid;
-  place-items: center;
-  font-family: var(--serif);
-  font-size: 18px;
-  color: var(--sage-deep);
-  background: rgba(230, 236, 228, 0.6);
-  backdrop-filter: blur(2px);
-  pointer-events: none;
-}
-.drop-flag-enter-active,
-.drop-flag-leave-active {
-  transition: opacity 0.18s;
-}
-.drop-flag-enter-from,
-.drop-flag-leave-to {
-  opacity: 0;
 }
 
 @media (max-width: 860px) {

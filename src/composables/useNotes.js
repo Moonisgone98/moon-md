@@ -5,7 +5,7 @@ const TITLE_KEY = 'moji.note.title'
 
 const DEFAULT_TITLE = '未命名笔记'
 
-const DEFAULT_CONTENT = `# 欢迎使用 墨记
+const DEFAULT_CONTENT = `# 欢迎使用 moon-md
 
 一个清新的 Markdown 笔记应用。**左侧编辑，右侧实时预览**，所写即所得。
 
@@ -19,7 +19,7 @@ const DEFAULT_CONTENT = `# 欢迎使用 墨记
 
 > 引用是一段被温柔包裹的文字。
 
-行内代码 \`const hello = '墨记'\`，或代码块：
+行内代码 \`const hello = 'moon-md'\`，或代码块：
 
 \`\`\`js
 function greet(name) {
@@ -165,7 +165,7 @@ function buildHtmlDocument(title, body) {
   <article class="prose">
 ${body}
   </article>
-  <footer>由 墨记 书写 · ${new Date().toLocaleDateString('zh-CN')}</footer>
+  <footer>由 moon-md 书写 · ${new Date().toLocaleDateString('zh-CN')}</footer>
 </div>
 </body>
 </html>`

@@ -9,6 +9,7 @@ defineProps({
 const emit = defineEmits([
   'update:title',
   'command',
+  'open-file',
   'export-md',
   'export-html',
   'reset',
@@ -24,8 +25,8 @@ function onTitleInput(e) {
   <header class="bar">
     <div class="bar__left">
       <div class="brand">
-        <span class="brand__mark">墨</span>
-        <span class="brand__name">墨记</span>
+        <span class="brand__mark">m</span>
+        <span class="brand__name">moon-md</span>
       </div>
       <div class="divider"></div>
       <input
@@ -63,13 +64,19 @@ function onTitleInput(e) {
         {{ saved ? '已保存' : '保存中…' }}
       </span>
       <span class="count">{{ wordCount }} 字 · {{ charCount }} 字符</span>
-      <button class="btn btn--ghost" title="重置为示例内容" @click="emit('reset')">
+      <button class="btn" title="打开本地 .md / 图片文件" @click="emit('open-file')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 7v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-7l-2-3H5a2 2 0 0 0-2 2z" />
+        </svg>
+        打开文件
+      </button>
+      <button class="btn btn--ghost btn--sm-hide" title="重置为示例内容" @click="emit('reset')">
         <svg class="icon-only" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
           <path d="M3 3v5h5" />
         </svg>
       </button>
-      <button class="btn" @click="emit('export-md')">
+      <button class="btn btn--sm-hide" @click="emit('export-md')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
           <path d="M7 10l5 5 5-5M12 15V3" />
@@ -238,7 +245,7 @@ function onTitleInput(e) {
   }
 }
 @media (max-width: 680px) {
-  .bar__right .btn:nth-child(3) {
+  .btn--sm-hide {
     display: none;
   }
   .brand__name {

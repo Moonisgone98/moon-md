@@ -16,6 +16,7 @@ marked.setOptions({
 const { title, content, reset, exportMarkdown, exportHtml } = useNotes()
 
 const editorRef = ref(null)
+const previewRef = ref(null)
 const view = ref('split') // edit | split | preview
 const splitRatio = ref(0.5) // 编辑区占比
 const saved = ref(true)
@@ -51,6 +52,12 @@ watch(
 
 function runCommand(cmd) {
   editorRef.value?.[cmd]?.()
+}
+
+// 编辑区滚动时，同步滚动预览区到对应位置
+function onEditorScroll(ratio) {
+  if (view.value !== 'split') return
+  previewRef.value?.syncScroll(ratio)
 }
 
 function handleExportHtml() {
@@ -99,6 +106,82 @@ function onDividerUp() {
   window.removeEventListener('mouseup', onDividerUp)
 }
 
+// —— 本地文件拖拽：拖入 .md/.txt 加载到预览，拖入图片插入笔记 ——
+const dragOver = ref(false)
+let dragDepth = 0
+
+function isFileDrag(e) {
+  return e.dataTransfer?.types?.includes('Files')
+}
+function onDragEnter(e) {
+  if (!isFileDrag(e)) return
+  e.preventDefault()
+  dragDepth++
+  dragOver.value = true
+}
+function onDragOver(e) {
+  if (!isFileDrag(e)) return
+  e.preventDefault()
+  e.dataTransfer.dropEffect = 'copy'
+}
+function onDragLeave(e) {
+  if (!isFileDrag(e)) return
+  dragDepth = Math.max(0, dragDepth - 1)
+  if (dragDepth === 0) dragOver.value = false
+}
+async function onFileDrop(e) {
+  if (!e.dataTransfer?.files?.length) return
+  e.preventDefault()
+  dragDepth = 0
+  dragOver.value = false
+  await loadFiles([...e.dataTransfer.files])
+}
+
+function isTextLike(file) {
+  return /\.(md|markdown|mdx|txt)$/i.test(file.name) || file.type === 'text/markdown' || file.type === 'text/plain'
+}
+
+async function loadFiles(files) {
+  let loadedText = false
+  for (const file of files) {
+    if (file.type.startsWith('image/')) {
+      await insertImageFile(file)
+    } else if (!loadedText && isTextLike(file)) {
+      await loadTextFile(file)
+      loadedText = true
+    }
+  }
+}
+
+async function loadTextFile(file) {
+  const text = await file.text()
+  content.value = text
+  title.value = file.name.replace(/\.[^.]+$/, '') || '未命名笔记'
+}
+
+function insertImageFile(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      content.value += `\n![${file.name}](${reader.result})\n`
+      resolve()
+    }
+    reader.onerror = resolve
+    reader.readAsDataURL(file)
+  })
+}
+
+// —— 文件选择按钮：弹出系统选择器，复用上面的加载逻辑 ——
+const fileInput = ref(null)
+function triggerOpenFile() {
+  fileInput.value?.click()
+}
+async function onFilePick(e) {
+  const files = e.target?.files
+  if (files?.length) await loadFiles([...files])
+  e.target.value = '' // 允许重复选择同一文件
+}
+
 const editStyle = computed(() =>
   view.value === 'split' ? { flex: `0 0 ${splitRatio.value * 100}%` } : {},
 )
@@ -108,7 +191,25 @@ const previewStyle = computed(() =>
 </script>
 
 <template>
-  <div class="app">
+  <div
+    class="app"
+    @dragenter="onDragEnter"
+    @dragover="onDragOver"
+    @dragleave="onDragLeave"
+    @drop="onFileDrop"
+  >
+    <transition name="drop-fade">
+      <div v-if="dragOver" class="drop-overlay">
+        <div class="drop-card">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <path d="M7 9l5-5 5 5M12 4v12" />
+          </svg>
+          <p class="drop-card__title">释放以打开文件</p>
+          <span class="drop-card__hint">支持 .md / .markdown / .txt · 图片将插入笔记</span>
+        </div>
+      </div>
+    </transition>
     <NoteToolbar
       :title="title"
       :char-count="charCount"
@@ -117,10 +218,19 @@ const previewStyle = computed(() =>
       :view="view"
       @update:title="title = $event"
       @command="runCommand"
+      @open-file="triggerOpenFile"
       @export-md="exportMarkdown"
       @export-html="handleExportHtml"
       @reset="reset"
       @set-view="view = $event"
+    />
+    <input
+      ref="fileInput"
+      type="file"
+      accept=".md,.markdown,.mdx,.txt,text/markdown,text/plain,image/*"
+      multiple
+      class="file-input-hidden"
+      @change="onFilePick"
     />
 
     <div class="subbar" v-if="view !== 'preview'">
@@ -129,7 +239,7 @@ const previewStyle = computed(() =>
 
     <main id="workspace" class="workspace" :class="'workspace--' + view">
       <div v-show="view !== 'preview'" class="pane pane--edit" :style="editStyle">
-        <EditorPane ref="editorRef" v-model:content="content" />
+        <EditorPane ref="editorRef" v-model:content="content" @scroll="onEditorScroll" />
       </div>
 
       <div
@@ -143,14 +253,14 @@ const previewStyle = computed(() =>
       </div>
 
       <div v-show="view !== 'edit'" class="pane pane--preview" :style="previewStyle">
-        <PreviewPane :html="cleanHtml" :empty="isEmpty" />
+        <PreviewPane ref="previewRef" :html="cleanHtml" :empty="isEmpty" />
       </div>
     </main>
 
     <footer class="statusbar">
-      <span>墨记 · Markdown 笔记</span>
+      <span>moon-md · Markdown 笔记</span>
       <span class="statusbar__hint">
-        <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>B</kbd> 加粗 · <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>I</kbd> 斜体 · 拖动中间分隔条调整栏宽
+        <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>B</kbd> 加粗 · <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>I</kbd> 斜体 · 拖入 .md/图片 · 拖动分隔条调栏宽
       </span>
     </footer>
   </div>
@@ -162,6 +272,17 @@ const previewStyle = computed(() =>
   flex-direction: column;
   height: 100svh;
   overflow: hidden;
+}
+.file-input-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .subbar {
@@ -251,6 +372,64 @@ kbd {
   font-size: 11px;
   color: var(--ink-soft);
   line-height: 1.5;
+}
+
+/* —— 文件拖拽遮罩 —— */
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background: rgba(251, 250, 245, 0.78);
+  backdrop-filter: blur(6px) saturate(1.1);
+  pointer-events: none;
+}
+.drop-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 44px 56px;
+  border: 2px dashed var(--sage);
+  border-radius: var(--r-xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  color: var(--sage-deep);
+  animation: pop 0.22s ease;
+}
+.drop-card svg {
+  width: 46px;
+  height: 46px;
+}
+.drop-card__title {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--sage-deep);
+}
+.drop-card__hint {
+  font-size: 13px;
+  color: var(--ink-faint);
+}
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.drop-fade-enter-active,
+.drop-fade-leave-active {
+  transition: opacity 0.18s ease;
+}
+.drop-fade-enter-from,
+.drop-fade-leave-to {
+  opacity: 0;
 }
 
 @media (max-width: 860px) {

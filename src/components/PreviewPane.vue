@@ -1,8 +1,22 @@
 <script setup>
+import { ref } from 'vue'
+
 defineProps({
   html: { type: String, required: true },
   empty: { type: Boolean, default: false },
 })
+
+const scrollEl = ref(null)
+
+// 按比例滚动预览区到与编辑区对应的位置
+function syncScroll(ratio) {
+  const el = scrollEl.value
+  if (!el) return
+  const max = el.scrollHeight - el.clientHeight
+  if (max > 0) el.scrollTop = ratio * max
+}
+
+defineExpose({ syncScroll })
 </script>
 
 <template>
@@ -14,7 +28,7 @@ defineProps({
       </svg>
       预览区
     </div>
-    <div class="preview__scroll">
+    <div ref="scrollEl" class="preview__scroll">
       <article v-if="!empty" class="prose" v-html="html"></article>
       <div v-else class="preview__empty">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
@@ -31,6 +45,8 @@ defineProps({
 .preview {
   position: relative;
   height: 100%;
+  flex: 1 1 0%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   background: var(--surface);
